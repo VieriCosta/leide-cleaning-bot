@@ -4,9 +4,6 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import requests
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-
 # ==========================================
 # CONFIGURAÇÕES BÁSICAS
 # ==========================================
@@ -14,10 +11,9 @@ from googleapiclient.discovery import build
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN", "YOUR_PAGE_ACCESS_TOKEN_HERE")
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "MY_LEIDE_VERIFY_TOKEN")
 
-SPREADSHEET_ID = "1375TOS-mGJiSBdhYpDOgzcM7PpKpSPmJBty6nurLHE"
-GOOGLE_CREDENTIALS_FILE = "credentials.json"
+# URL do seu Web App no Google Apps Script
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzQeTE2Xry0GY4XaQV298w6uLegcdWHy9fY1skqmiA_IGA2xuVHjhwLADJN2XWJfeNP/exec"
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # ==========================================
 # ESTADOS
@@ -27,46 +23,32 @@ user_states = {}
 
 app = Flask(__name__)
 
-# ==========================================
-# GOOGLE SHEETS
-# ==========================================
 
-def get_sheets_service():
-    credentials = service_account.Credentials.from_service_account_file(
-        GOOGLE_CREDENTIALS_FILE,
-        scopes=SCOPES
-    )
-    service = build("sheets", "v4", credentials=credentials)
-    return service
-
+# ==========================================
+# GOOGLE SHEETS VIA WEB APP
+# ==========================================
 
 def append_row_to_sheet(user_data):
-    service = get_sheets_service()
-    sheet = service.spreadsheets()
+    try:
+        data_to_send = {
+            "name": user_data.get("name", ""),
+            "phone": user_data.get("phone", ""),
+            "address": user_data.get("address", ""),
+            "cleaning_type": user_data.get("cleaning_type", ""),
+            "bedrooms": user_data.get("bedrooms", ""),
+            "bathrooms": user_data.get("bathrooms", ""),
+            "notes": user_data.get("notes", ""),
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
-    timestamp = datetime.utcnow().isoformat()
+        response = requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=data_to_send)
 
-    values = [[
-        user_data.get("name", ""),
-        user_data.get("phone", ""),
-        user_data.get("address", ""),
-        user_data.get("cleaning_type", ""),
-        user_data.get("bedrooms", ""),
-        user_data.get("bathrooms", ""),
-        user_data.get("notes", ""),
-        timestamp
-    ]]
+        print("Sheets response:", response.text)
 
-    body = {
-        "values": values
-    }
+    except Exception as e:
+        print("Error sending to Google Sheets:", e)
 
-    sheet.values().append(
-        spreadsheetId=SPREADSHEET_ID,
-        range="A2",
-        valueInputOption="USER_ENTERED",
-        body=body
-    ).execute()
+
 
 
 # ==========================================
@@ -85,6 +67,7 @@ def send_message(recipient_id, text):
     response = requests.post(url, params=params, json=payload)
     if response.status_code != 200:
         print("Erro ao enviar mensagem:", response.status_code, response.text)
+
 
 
 # ==========================================
@@ -161,6 +144,7 @@ def handle_user_message(user_id, message_text):
         return
 
 
+
 # ==========================================
 # WEBHOOK FACEBOOK
 # ==========================================
@@ -192,6 +176,7 @@ def handle_webhook():
                         handle_user_message(sender_id, text)
 
     return "EVENT_RECEIVED", 200
+
 
 
 @app.route("/", methods=["GET"])
