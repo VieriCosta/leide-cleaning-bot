@@ -91,7 +91,7 @@ def handle_user_message(user_id, message_text):
     # INÍCIO
     # -----------------------------
     if step == "start":
-        send_message(user_id, "Hi! What is your full name?")
+        send_message(user_id, "Welcome! 👋 I am the virtual assistant for *Leide Cleaning* and I will start your service request.\n\nWhat is your full name?")
         state["step"] = "ask_name"
         return
 
@@ -100,7 +100,7 @@ def handle_user_message(user_id, message_text):
     # -----------------------------
     if step == "ask_name":
         data["name"] = text
-        send_message(user_id, "Welcome! 👋 I am the virtual assistant for *Leide Cleaning* and I will start your service request.\n\nWhat is your full name?")
+        send_message(user_id, "What is your phone email?")
         state["step"] = "ask_email"
         return
 
