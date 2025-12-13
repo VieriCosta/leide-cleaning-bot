@@ -8,15 +8,18 @@ import requests
 # CONFIGURAÇÕES BÁSICAS
 # ==========================================
 
+# Token da página do Facebook
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN", "YOUR_PAGE_ACCESS_TOKEN_HERE")
+
+# Token de verificação do webhook
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "MY_LEIDE_VERIFY_TOKEN")
 
-# URL do seu Web App do Google Sheets
+# URL do Web App do Google Sheets (Apps Script)
 GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzQeTE2Xry0GY4XaQV298w6uLegcdWHy9fY1skqmiA_IGA2xuVHjhwLADJN2XWJfeNP/exec"
 
 
 # ==========================================
-# ESTADOS
+# CONTROLE DE ESTADOS DOS USUÁRIOS
 # ==========================================
 
 user_states = {}
@@ -25,12 +28,11 @@ app = Flask(__name__)
 
 
 # ==========================================
-# GOOGLE SHEETS VIA WEB APP
+# FUNÇÃO PARA SALVAR NO GOOGLE SHEETS
 # ==========================================
 
 def append_row_to_sheet(user_data):
     try:
-
         data_to_send = {
             "name": user_data.get("name", ""),
             "email": user_data.get("email", ""),
@@ -40,19 +42,23 @@ def append_row_to_sheet(user_data):
             "bedrooms": user_data.get("bedrooms", ""),
             "bathrooms": user_data.get("bathrooms", ""),
             "notes": user_data.get("notes", ""),
-            "timestamp": datetime.utcnow().strftime("%m/%d - %H:%M")  # DATA LIMPA
+            "timestamp": datetime.utcnow().strftime("%m/%d - %H:%M")
         }
 
-        response = requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=data_to_send)
-        print("Sheets response:", response.text)
+        response = requests.post(
+            GOOGLE_SHEETS_WEBAPP_URL,
+            json=data_to_send,
+            timeout=10
+        )
+
+        print("Google Sheets response:", response.text)
 
     except Exception as e:
-        print("Error sending to Google Sheets:", e)
-
+        print("Error sending data to Google Sheets:", e)
 
 
 # ==========================================
-# FACEBOOK MESSENGER
+# FUNÇÃO PARA ENVIAR MENSAGEM NO MESSENGER
 # ==========================================
 
 def send_message(recipient_id, text):
@@ -70,16 +76,22 @@ def send_message(recipient_id, text):
         print("Erro ao enviar mensagem:", response.status_code, response.text)
 
 
-
 # ==========================================
-# FLUXO DO BOT
+# GERENCIAMENTO DE ESTADO DO USUÁRIO
 # ==========================================
 
 def get_user_state(user_id):
     if user_id not in user_states:
-        user_states[user_id] = {"step": "start", "data": {}}
+        user_states[user_id] = {
+            "step": "start",
+            "data": {}
+        }
     return user_states[user_id]
 
+
+# ==========================================
+# FLUXO PRINCIPAL DO BOT
+# ==========================================
 
 def handle_user_message(user_id, message_text):
     state = get_user_state(user_id)
@@ -91,16 +103,21 @@ def handle_user_message(user_id, message_text):
     # INÍCIO
     # -----------------------------
     if step == "start":
-        send_message(user_id, "Welcome! 👋 I am the virtual assistant for *Leide Cleaning* and I will start your service request.\n\nWhat is your full name?")
+        send_message(
+            user_id,
+            "Welcome! 👋\n\n"
+            "I am the virtual assistant for *Leide Cleaning* and I will help you start your service request.\n\n"
+            "What is your full name?"
+        )
         state["step"] = "ask_name"
         return
 
     # -----------------------------
-    # NOME
+    # NOME COMPLETO
     # -----------------------------
     if step == "ask_name":
         data["name"] = text
-        send_message(user_id, "What is your phone email?")
+        send_message(user_id, "What is your email?")
         state["step"] = "ask_email"
         return
 
@@ -118,7 +135,7 @@ def handle_user_message(user_id, message_text):
     # -----------------------------
     if step == "ask_phone":
         data["phone"] = text
-        send_message(user_id, "Full address?")
+        send_message(user_id, "Please provide your full address.")
         state["step"] = "ask_address"
         return
 
@@ -129,8 +146,12 @@ def handle_user_message(user_id, message_text):
         data["address"] = text
         send_message(
             user_id,
-            "Type of cleaning?\n"
-            "- Standard\n- Deep\n- Move In/Out\n- Carpet\n- Commercial"
+            "What type of cleaning do you need?\n\n"
+            "- Standard\n"
+            "- Deep\n"
+            "- Move In / Move Out\n"
+            "- Carpet\n"
+            "- Commercial"
         )
         state["step"] = "ask_cleaning_type"
         return
@@ -158,29 +179,40 @@ def handle_user_message(user_id, message_text):
     # -----------------------------
     if step == "ask_bathrooms":
         data["bathrooms"] = text
-        send_message(user_id, "Any notes? (pets, construction, etc.)")
+        send_message(
+            user_id,
+            "Any additional notes?\n"
+            "(Pets, construction, special requests, etc.)"
+        )
         state["step"] = "ask_notes"
         return
 
     # -----------------------------
-    # NOTAS
+    # OBSERVAÇÕES
     # -----------------------------
     if step == "ask_notes":
         data["notes"] = text
 
-        # Salva na planilha
+        # Envia os dados para o Google Sheets
         append_row_to_sheet(data)
 
-        send_message(user_id, "Thank you! A representative will contact you soon.")
+        send_message(
+            user_id,
+            "Thank you! ✅\n\n"
+            "Your request has been successfully received.\n"
+            "A Leide Cleaning representative will contact you shortly."
+        )
 
-        # Reinicia o fluxo
-        user_states[user_id] = {"step": "start", "data": {}}
+        # Reinicia o fluxo para o usuário
+        user_states[user_id] = {
+            "step": "start",
+            "data": {}
+        }
         return
 
 
-
 # ==========================================
-# WEBHOOK FACEBOOK
+# WEBHOOK - VERIFICAÇÃO (GET)
 # ==========================================
 
 @app.route("/webhook", methods=["GET"])
@@ -190,12 +222,15 @@ def verify_webhook():
     challenge = request.args.get("hub.challenge")
 
     if mode == "subscribe" and token == VERIFY_TOKEN:
-        print("Webhook verificado!")
+        print("Webhook verified successfully!")
         return challenge, 200
 
-    return "Invalid token", 403
+    return "Invalid verification token", 403
 
 
+# ==========================================
+# WEBHOOK - RECEBIMENTO DE MENSAGENS (POST)
+# ==========================================
 
 @app.route("/webhook", methods=["POST"])
 def handle_webhook():
@@ -214,11 +249,13 @@ def handle_webhook():
     return "EVENT_RECEIVED", 200
 
 
+# ==========================================
+# ROTA DE STATUS
+# ==========================================
 
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({"status": "Leide Cleaning bot is running"})
-
 
 
 # ==========================================
