@@ -99,6 +99,10 @@ def handle_user_message(user_id, message_text):
     data = state["data"]
     text = (message_text or "").strip()
 
+    # 🔒 NÃO RESPONDE SE JÁ FINALIZOU
+    if step == "completed":
+        return
+
     # -----------------------------
     # INÍCIO
     # -----------------------------
@@ -203,9 +207,9 @@ def handle_user_message(user_id, message_text):
             "A Leide Cleaning representative will contact you shortly."
         )
 
-        # Reinicia o fluxo para o usuário
+        # 🔒 FINALIZA DEFINITIVAMENTE (SEM LOOP)
         user_states[user_id] = {
-            "step": "start",
+            "step": "completed",
             "data": {}
         }
         return
